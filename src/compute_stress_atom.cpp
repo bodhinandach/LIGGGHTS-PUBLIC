@@ -77,11 +77,11 @@ ComputeStressAtom::ComputeStressAtom(LAMMPS *lmp, int &iarg, int narg, char **ar
   if (narg < iarg) error->all(FLERR,"Illegal compute stress/atom command");
 
   peratom_flag = 1;
-  size_peratom_cols = 6;
+  size_peratom_cols = 9;
   pressatomflag = 1;
   timeflag = 1;
-  comm_forward = 6; 
-  comm_reverse = 6;
+  comm_forward = 9;
+  comm_reverse = 9;
 
   if (narg == iarg) {
     keflag = 1;
@@ -141,7 +141,7 @@ void ComputeStressAtom::compute_peratom()
   if (atom->nmax > nmax) {
     memory->destroy(stress);
     nmax = atom->nmax;
-    memory->create(stress,nmax,6,"stress/atom:stress");
+    memory->create(stress,nmax,9,"stress/atom:stress");
     array_atom = stress;
   }
 
@@ -164,51 +164,66 @@ void ComputeStressAtom::compute_peratom()
   // clear local stress array
 
   for (i = 0; i < ntotal; i++)
-    for (j = 0; j < 6; j++)
+    for (j = 0; j < 9; j++)
       stress[i][j] = 0.0;
 
   // add in per-atom contributions from each force
 
   if (pairflag && force->pair) {
-    double **vatom = force->pair->vatom;
+    double **cvatom = force->pair->cvatom;
     for (i = 0; i < npair; i++)
-      for (j = 0; j < 6; j++)
-        stress[i][j] += vatom[i][j];
+      for (j = 0; j < 9; j++)
+        stress[i][j] += cvatom[i][j];
   }
 
   if (bondflag && force->bond) {
     double **vatom = force->bond->vatom;
-    for (i = 0; i < nbond; i++)
+    for (i = 0; i < nbond; i++) {
       for (j = 0; j < 6; j++)
         stress[i][j] += vatom[i][j];
+      for (j = 6; j < 9; j++)
+        stress[i][j] += vatom[i][j-3];
+    }
   }
 
   if (angleflag && force->angle) {
     double **vatom = force->angle->vatom;
-    for (i = 0; i < nbond; i++)
+    for (i = 0; i < nbond; i++){
       for (j = 0; j < 6; j++)
         stress[i][j] += vatom[i][j];
+      for (j = 6; j < 9; j++)
+        stress[i][j] += vatom[i][j-3];
+    }
   }
 
   if (dihedralflag && force->dihedral) {
     double **vatom = force->dihedral->vatom;
-    for (i = 0; i < nbond; i++)
+    for (i = 0; i < nbond; i++){
       for (j = 0; j < 6; j++)
         stress[i][j] += vatom[i][j];
+      for (j = 6; j < 9; j++)
+        stress[i][j] += vatom[i][j-3];
+    }
   }
 
   if (improperflag && force->improper) {
     double **vatom = force->improper->vatom;
-    for (i = 0; i < nbond; i++)
+    for (i = 0; i < nbond; i++){
       for (j = 0; j < 6; j++)
         stress[i][j] += vatom[i][j];
+      for (j = 6; j < 9; j++)
+        stress[i][j] += vatom[i][j-3];
+    }
   }
 
   if (kspaceflag && force->kspace) {
     double **vatom = force->kspace->vatom;
-    for (i = 0; i < nkspace; i++)
+    for (i = 0; i < nkspace; i++) {
       for (j = 0; j < 6; j++)
         stress[i][j] += vatom[i][j];
+      for (j = 6; j < 9; j++)
+        stress[i][j] += vatom[i][j-3];
+    }
   }
   // add in per-atom contributions from relevant fixes
   // skip if vatom = NULL
@@ -221,9 +236,12 @@ void ComputeStressAtom::compute_peratom()
       if (modify->fix[ifix]->virial_flag) {
         double **vatom = modify->fix[ifix]->vatom;
         if (vatom)
-          for (i = 0; i < nlocal; i++)
+          for (i = 0; i < nlocal; i++) {
             for (j = 0; j < 6; j++)
               stress[i][j] += vatom[i][j];
+            for (j = 6; j < 9; j++)
+              stress[i][j] += vatom[i][j-3];
+          }
       }
   }
 
@@ -245,6 +263,9 @@ void ComputeStressAtom::compute_peratom()
       stress[i][3] = 0.0;
       stress[i][4] = 0.0;
       stress[i][5] = 0.0;
+      stress[i][6] = 0.0;
+      stress[i][7] = 0.0;
+      stress[i][8] = 0.0;
     }
 
   // include kinetic energy term for each atom in group
@@ -267,6 +288,9 @@ void ComputeStressAtom::compute_peratom()
           stress[i][3] += onemass*v[i][0]*v[i][1];
           stress[i][4] += onemass*v[i][0]*v[i][2];
           stress[i][5] += onemass*v[i][1]*v[i][2];
+          stress[i][6] += onemass*v[i][1]*v[i][0];
+          stress[i][7] += onemass*v[i][2]*v[i][0];
+          stress[i][8] += onemass*v[i][2]*v[i][1];
         }
 
     } else {
@@ -279,6 +303,9 @@ void ComputeStressAtom::compute_peratom()
           stress[i][3] += onemass*v[i][0]*v[i][1];
           stress[i][4] += onemass*v[i][0]*v[i][2];
           stress[i][5] += onemass*v[i][1]*v[i][2];
+          stress[i][6] += onemass*v[i][1]*v[i][0];
+          stress[i][7] += onemass*v[i][2]*v[i][0];
+          stress[i][8] += onemass*v[i][2]*v[i][1];
         }
     }
   }
@@ -294,6 +321,9 @@ void ComputeStressAtom::compute_peratom()
       stress[i][3] *= nktv2p;
       stress[i][4] *= nktv2p;
       stress[i][5] *= nktv2p;
+      stress[i][6] *= nktv2p;
+      stress[i][7] *= nktv2p;
+      stress[i][8] *= nktv2p;
     }
 }
 
@@ -312,8 +342,11 @@ int ComputeStressAtom::pack_reverse_comm(int n, int first, double *buf)
     buf[m++] = stress[i][3];
     buf[m++] = stress[i][4];
     buf[m++] = stress[i][5];
+    buf[m++] = stress[i][6];
+    buf[m++] = stress[i][7];
+    buf[m++] = stress[i][8];
   }
-  return 6;
+  return 9;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -331,6 +364,9 @@ void ComputeStressAtom::unpack_reverse_comm(int n, int *list, double *buf)
     stress[j][3] += buf[m++];
     stress[j][4] += buf[m++];
     stress[j][5] += buf[m++];
+    stress[j][6] += buf[m++];
+    stress[j][7] += buf[m++];
+    stress[j][8] += buf[m++];
   }
 }
 
@@ -340,7 +376,7 @@ void ComputeStressAtom::unpack_reverse_comm(int n, int *list, double *buf)
 
 double ComputeStressAtom::memory_usage()
 {
-  double bytes = nmax*6 * sizeof(double);
+  double bytes = nmax*9 * sizeof(double);
   return bytes;
 }
 
@@ -360,8 +396,11 @@ int ComputeStressAtom::pack_comm(int n, int *list, double *buf,
       buf[m++] = stress[j][3];
       buf[m++] = stress[j][4];
       buf[m++] = stress[j][5];
+      buf[m++] = stress[j][6];
+      buf[m++] = stress[j][7];
+      buf[m++] = stress[j][8];
     }
-    return 6;
+    return 9;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -378,6 +417,9 @@ void ComputeStressAtom::unpack_comm(int n, int first, double *buf)
       stress[i][3] = buf[m++];
       stress[i][4] = buf[m++];
       stress[i][5] = buf[m++];
+      stress[i][6] = buf[m++];
+      stress[i][7] = buf[m++];
+      stress[i][8] = buf[m++];
   }
 
 }
