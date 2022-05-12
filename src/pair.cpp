@@ -101,6 +101,8 @@ Pair::Pair(LAMMPS *lmp) : Pointers(lmp)
 
   ewaldflag = pppmflag = msmflag = dispersionflag = tip4pflag = dipoleflag = 0;
 
+  centroidstressflag = 4;
+
   // pair_modify settings
 
   compute_flag = 1;
@@ -117,12 +119,13 @@ Pair::Pair(LAMMPS *lmp) : Pointers(lmp)
   allocated = 0;
   suffix_flag = Suffix::NONE;
 
-  maxeatom = maxvatom = 0;
+  maxeatom = maxvatom = maxcvatom = 0;
   eatom = NULL;
   vatom = NULL;
+  cvatom = NULL;
 
   listgranhistory = NULL;
-  list = listhalf = listfull = listgranhistory = listinner = listmiddle = listouter = NULL; 
+  list = listhalf = listfull = listgranhistory = listinner = listmiddle = listouter = NULL;
 
   datamask = ALL_MASK;
   datamask_ext = ALL_MASK;
@@ -134,6 +137,7 @@ Pair::~Pair()
 {
   memory->destroy(eatom);
   memory->destroy(vatom);
+  memory->destroy(cvatom);
 }
 
 /* ----------------------------------------------------------------------
@@ -268,11 +272,11 @@ void Pair::init()
 
 void Pair::reinit()
 {
-  
+
   etail = ptail = 0.0;
 
-  for (int i = 1; i <= atom->ntypes; i++) 
-    for (int j = i; j <= atom->ntypes; j++) { 
+  for (int i = 1; i <= atom->ntypes; i++)
+    for (int j = i; j <= atom->ntypes; j++) {
       init_one(i,j);
       if (tail_flag) {
         etail += etail_ij;
@@ -527,7 +531,7 @@ void Pair::init_tables(double cut_coul, double *cut_respa)
 void Pair::init_tables_disp(double cut_lj_global)
 {
   int masklo,maskhi;
-  double rsq; 
+  double rsq;
   double g_ewald_6 = force->kspace->g_ewald_6;
   double g2 = g_ewald_6*g_ewald_6, g6 = g2*g2*g2, g8 = g6*g2;
 
@@ -564,7 +568,7 @@ void Pair::init_tables_disp(double cut_lj_global)
       rsq_lookup.i = i << ndispshiftbits;
       rsq_lookup.i |= maskhi;
     }
-    
+
     rsq = rsq_lookup.f;
     double x2 = g2*rsq, a2 = 1.0/x2;
     x2 = a2*exp(-x2);
@@ -600,7 +604,7 @@ void Pair::init_tables_disp(double cut_lj_global)
   // deltas at itablemax only needed if corresponding rsq < cut*cut
   // if so, compute deltas between rsq and cut*cut
 
-  double f_tmp,e_tmp; 
+  double f_tmp,e_tmp;
   double cut_lj_globalsq;
   itablemin = minrsq_lookup.i & ndispmask;
   itablemin >>= ndispshiftbits;
@@ -611,7 +615,7 @@ void Pair::init_tables_disp(double cut_lj_global)
 
   if (rsq_lookup.f < (cut_lj_globalsq = cut_lj_global * cut_lj_global)) {
     rsq_lookup.f = cut_lj_globalsq;
-    
+
     double x2 = g2*rsq, a2 = 1.0/x2;
     x2 = a2*exp(-x2);
     f_tmp = g8*(((6.0*a2+6.0)*a2+3.0)*a2+1.0)*x2*rsq;
@@ -713,6 +717,7 @@ void Pair::ev_setup(int eflag, int vflag)
   vflag_either = vflag;
   vflag_global = vflag % 4;
   vflag_atom = vflag / 4;
+  cvflag_atom = 1;
 
   // reallocate per-atom arrays if necessary
 
@@ -725,6 +730,11 @@ void Pair::ev_setup(int eflag, int vflag)
     maxvatom = atom->nmax;
     memory->destroy(vatom);
     memory->create(vatom,comm->nthreads*maxvatom,6,"pair:vatom");
+  }
+  if (cvflag_atom && atom->nmax > maxcvatom) {
+    maxcvatom = atom->nmax;
+    memory->destroy(cvatom);
+    memory->create(cvatom,comm->nthreads*maxcvatom,9,"pair:cvatom");
   }
 
   // zero accumulators
@@ -750,6 +760,21 @@ void Pair::ev_setup(int eflag, int vflag)
       vatom[i][5] = 0.0;
     }
   }
+  if (cvflag_atom) {
+    n = atom->nlocal;
+    if (force->newton) n += atom->nghost;
+    for (i = 0; i < n; i++) {
+      cvatom[i][0] = 0.0;
+      cvatom[i][1] = 0.0;
+      cvatom[i][2] = 0.0;
+      cvatom[i][3] = 0.0;
+      cvatom[i][4] = 0.0;
+      cvatom[i][5] = 0.0;
+      cvatom[i][6] = 0.0;
+      cvatom[i][7] = 0.0;
+      cvatom[i][8] = 0.0;
+    }
+  }
 
   // if vflag_global = 2 and pair::compute() calls virial_fdotr_compute()
   // compute global virial via (F dot r) instead of via pairwise summation
@@ -758,7 +783,7 @@ void Pair::ev_setup(int eflag, int vflag)
   if (vflag_global == 2 && no_virial_fdotr_compute == 0) {
     vflag_fdotr = 1;
     vflag_global = 0;
-    if (vflag_atom == 0) vflag_either = 0;
+    if (vflag_atom == 0 && cvflag_atom == 0) vflag_either = 0;
     if (vflag_either == 0 && eflag_either == 0) evflag = 0;
   } else vflag_fdotr = 0;
 
@@ -782,6 +807,7 @@ void Pair::ev_unset()
   vflag_either = 0;
   vflag_global = 0;
   vflag_atom = 0;
+  cvflag_atom = 0;
   vflag_fdotr = 0;
 }
 
@@ -934,7 +960,7 @@ void Pair::ev_tally_xyz(int i, int j, int nlocal, int newton_pair,
                         double fx, double fy, double fz,
                         double delx, double dely, double delz)
 {
-  double evdwlhalf,ecoulhalf,epairhalf,v[6];
+  double evdwlhalf,ecoulhalf,epairhalf,v[6],cv[9];
 
   if (eflag_either) {
     if (eflag_global) {
@@ -968,6 +994,16 @@ void Pair::ev_tally_xyz(int i, int j, int nlocal, int newton_pair,
     v[3] = delx*fy;
     v[4] = delx*fz;
     v[5] = dely*fz;
+
+    cv[0] = delx*fx;
+    cv[1] = dely*fy;
+    cv[2] = delz*fz;
+    cv[3] = delx*fy;
+    cv[4] = delx*fz;
+    cv[5] = dely*fz;
+    cv[6] = dely*fx;
+    cv[7] = delz*fx;
+    cv[8] = delz*fy;
 
     if (vflag_global) {
       if (newton_pair) {
@@ -1005,6 +1041,16 @@ void Pair::ev_tally_xyz(int i, int j, int nlocal, int newton_pair,
         vatom[i][3] += 0.5*v[3];
         vatom[i][4] += 0.5*v[4];
         vatom[i][5] += 0.5*v[5];
+
+        cvatom[i][0] += 0.5*cv[0];
+        cvatom[i][1] += 0.5*cv[1];
+        cvatom[i][2] += 0.5*cv[2];
+        cvatom[i][3] += 0.5*cv[3];
+        cvatom[i][4] += 0.5*cv[4];
+        cvatom[i][5] += 0.5*cv[5];
+        cvatom[i][6] += 0.5*cv[6];
+        cvatom[i][7] += 0.5*cv[7];
+        cvatom[i][8] += 0.5*cv[8];
       }
       if (newton_pair || j < nlocal) {
         vatom[j][0] += 0.5*v[0];
@@ -1013,6 +1059,16 @@ void Pair::ev_tally_xyz(int i, int j, int nlocal, int newton_pair,
         vatom[j][3] += 0.5*v[3];
         vatom[j][4] += 0.5*v[4];
         vatom[j][5] += 0.5*v[5];
+
+        cvatom[j][0] += 0.5*cv[0];
+        cvatom[j][1] += 0.5*cv[1];
+        cvatom[j][2] += 0.5*cv[2];
+        cvatom[j][3] += 0.5*cv[3];
+        cvatom[j][4] += 0.5*cv[4];
+        cvatom[j][5] += 0.5*cv[5];
+        cvatom[j][6] += 0.5*cv[6];
+        cvatom[j][7] += 0.5*cv[7];
+        cvatom[j][8] += 0.5*cv[8];
       }
     }
   }
@@ -1182,7 +1238,7 @@ void Pair::ev_tally4(int i, int j, int k, int m, double evdwl,
 void Pair::ev_tally_tip4p(int key, int *list, double *v,
                           double ecoul, double alpha)
 {
-  int i; 
+  int i;
 
   if (eflag_either) {
     if (eflag_global) eng_coul += ecoul;
@@ -1730,6 +1786,7 @@ double Pair::memory_usage()
 {
   double bytes = comm->nthreads*maxeatom * sizeof(double);
   bytes += comm->nthreads*maxvatom*6 * sizeof(double);
+  bytes += comm->nthreads*maxcvatom*9 * sizeof(double);
   return bytes;
 }
 
