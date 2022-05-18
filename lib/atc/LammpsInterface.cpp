@@ -12,11 +12,12 @@
 #include "compute.h" // computes
 #include "compute_pe_atom.h" // computes potential energy per atom
 #include "compute_stress_atom.h" // computes stress per atom
+#include "compute_couple_stress_atom.h" // computes stress per atom
 #include "compute_centro_atom.h" // computes centrosymmetry per atom
 #include "compute_cna_atom.h" // computes common-neighbor-analysis per atom
 #include "compute_coord_atom.h" // computes coordination number per atom
 #include "compute_ke_atom.h" // computes kinetic energy per atom
-#include "modify.h" // 
+#include "modify.h" //
 #include "neighbor.h" // neighbors
 #include "neigh_list.h" // neighbor list
 #include "update.h" // timestepping information
@@ -108,7 +109,7 @@ void LammpsInterface::comm_borders() const { lammps_->comm->borders(); }
 void LammpsInterface::sparse_allsum(SparseMatrix<double> &toShare) const
 {
   toShare.compress();
-  
+
   // initialize MPI information
   int nProcs;
   int myRank;
@@ -117,7 +118,7 @@ void LammpsInterface::sparse_allsum(SparseMatrix<double> &toShare) const
 
   int error;
 
-  // get numbers of rows, columns, rowsCRS, and 
+  // get numbers of rows, columns, rowsCRS, and
   // sizes (number of nonzero elements in matrix)
   SparseMatInfo *recInfo = new SparseMatInfo[nProcs];
   SparseMatInfo myInfo;
@@ -172,7 +173,7 @@ void LammpsInterface::sparse_allsum(SparseMatrix<double> &toShare) const
                          rec_ja, sizeCounts, sizeOffsets, MPI_INT, lammps_->world);
   if (error != MPI_SUCCESS)
     throw ATC_Error("error in sparse_allsum_colarray "+to_string(error));
-     
+
   // get the array of values
   double *rec_vals = new double[totalSize];
   error = MPI_Allgatherv(toShare.ptr(), sizeCounts[myRank], MPI_DOUBLE,
@@ -180,8 +181,8 @@ void LammpsInterface::sparse_allsum(SparseMatrix<double> &toShare) const
   if (error != MPI_SUCCESS)
     throw ATC_Error("error in sparse_allsum_valarray "+to_string(error));
 
-  INDEX *rec_ia_proc; 
-  INDEX *rec_ja_proc; 
+  INDEX *rec_ia_proc;
+  INDEX *rec_ja_proc;
   double *rec_vals_proc;
   for (int i = 0; i < nProcs; i++) {
     if (myRank != i) {
@@ -189,24 +190,24 @@ void LammpsInterface::sparse_allsum(SparseMatrix<double> &toShare) const
       rec_ia_proc = new INDEX[rowCounts[i]];
       rec_ja_proc = new INDEX[sizeCounts[i]];
       rec_vals_proc = new double[sizeCounts[i]];
-       
+
       // copy the data passed with MPI into the new spots
-      copy(rec_ia + rowOffsets[i], 
+      copy(rec_ia + rowOffsets[i],
            rec_ia + rowOffsets[i] + rowCounts[i],
            rec_ia_proc);
-      copy(rec_ja + sizeOffsets[i], 
+      copy(rec_ja + sizeOffsets[i],
            rec_ja + sizeOffsets[i] + sizeCounts[i],
            rec_ja_proc);
-      copy(rec_vals + sizeOffsets[i], 
+      copy(rec_vals + sizeOffsets[i],
            rec_vals + sizeOffsets[i] + sizeCounts[i],
            rec_vals_proc);
 
       // Does anyone know why we have to declare tempMat here (as well as set it equal to
-      // something) to avoid segfaults? there are still segfaults, but they happen at a much 
+      // something) to avoid segfaults? there are still segfaults, but they happen at a much
       // later stage of the game now (and for less benchmarks overall).
       SparseMatrix<double> tempMat =
-        SparseMatrix<double>(rec_ia_proc, rec_ja_proc, rec_vals_proc, 
-                             recInfo[i].size, recInfo[i].rows, 
+        SparseMatrix<double>(rec_ia_proc, rec_ja_proc, rec_vals_proc,
+                             recInfo[i].size, recInfo[i].rows,
                              recInfo[i].cols, recInfo[i].rowsCRS);
       toShare += tempMat;
     }
@@ -231,7 +232,7 @@ int LammpsInterface::nghost() const { return lammps_->atom->nghost; }
 bool LammpsInterface::atoms_sorted() const
 {
   int sortfreq = lammps_->atom->sortfreq;
-  if (sortfreq > 0) { return true; } 
+  if (sortfreq > 0) { return true; }
   else              { return false;
 }
 }
@@ -245,7 +246,7 @@ int LammpsInterface::ntypes() const { return lammps_->atom->ntypes; }
 
 double ** LammpsInterface::xatom() const { return lammps_->atom->x; }
 
-int LammpsInterface::type_to_charge(int atype) const { 
+int LammpsInterface::type_to_charge(int atype) const {
   double *q = lammps_->atom->q;
   if (! q) return 0;
   int nlocal = lammps_->atom->nlocal;
@@ -253,7 +254,7 @@ int LammpsInterface::type_to_charge(int atype) const {
   double aq = 0.0;
   for (int i = 0; i < nlocal; i++) {
     if (type[i] == atype) {
-      aq = q[i]; 
+      aq = q[i];
       break;
     }
   }
@@ -352,7 +353,7 @@ double LammpsInterface::atom_quantity_conversion(FundamentalAtomQuantity quantit
   else
     throw ATC_Error("BAD type requested in atom_quantity_conversion");
 }
-  
+
 // -----------------------------------------------------------------
 //  domain interface methods
 // -----------------------------------------------------------------
@@ -363,7 +364,7 @@ int LammpsInterface::nregion() const { return lammps_->domain->nregion; }
 
 void LammpsInterface::box_bounds(double & boxxlo, double & boxxhi,
                                  double & boxylo, double & boxyhi,
-                                 double & boxzlo, double &boxzhi) const 
+                                 double & boxzlo, double &boxzhi) const
 {
   if (lammps_->domain->triclinic == 0) {
     boxxlo = lammps_->domain->boxlo[0];
@@ -389,7 +390,7 @@ bool LammpsInterface::in_box(double * x) const
   box_bounds(xlo,xhi,ylo,yhi,zlo,zhi);
   if (x[0] >= xlo && x[0] < xhi &&
       x[1] >= ylo && x[1] < yhi &&
-      x[2] >= zlo && x[2] < zhi) 
+      x[2] >= zlo && x[2] < zhi)
   return true;
   return false;
 }
@@ -398,9 +399,9 @@ bool LammpsInterface::in_my_processor_box(double * x) const
 {
   if (x[0] >= lammps_->domain->sublo[0] && x[0] < lammps_->domain->subhi[0] &&
       x[1] >= lammps_->domain->sublo[1] && x[1] < lammps_->domain->subhi[1] &&
-      x[2] >= lammps_->domain->sublo[2] && x[2] < lammps_->domain->subhi[2]) 
+      x[2] >= lammps_->domain->sublo[2] && x[2] < lammps_->domain->subhi[2])
   return true;
-  if (! in_box(x)) 
+  if (! in_box(x))
     throw ATC_Error("point is in no processors box");
   return false;
 }
@@ -408,7 +409,7 @@ bool LammpsInterface::in_my_processor_box(double * x) const
 
 void LammpsInterface::sub_bounds(double & subxlo, double & subxhi,
                                  double & subylo, double & subyhi,
-                                 double & subzlo, double & subzhi) const 
+                                 double & subzlo, double & subzhi) const
 {
   if (lammps_->domain->triclinic == 0) {
     subxlo = lammps_->domain->sublo[0];
@@ -429,8 +430,8 @@ int LammpsInterface::yperiodic() const { return lammps_->domain->yperiodic; }
 
 int LammpsInterface::zperiodic() const { return lammps_->domain->zperiodic; }
 
-int LammpsInterface::nperiodic() const 
-{ 
+int LammpsInterface::nperiodic() const
+{
   int nprd = 0;
   if ( lammps_->domain->xperiodic > 0 ) { nprd++ ; }
   if ( lammps_->domain->yperiodic > 0 ) { nprd++ ; }
@@ -439,10 +440,10 @@ int LammpsInterface::nperiodic() const
 }
 
 // correct posistions for periodic box
-void LammpsInterface::periodicity_correction(double * x) const 
+void LammpsInterface::periodicity_correction(double * x) const
 {
-  int* periodicity = lammps_->domain->periodicity; 
-  if (!refBoxIsSet_) set_reference_box(); 
+  int* periodicity = lammps_->domain->periodicity;
+  if (!refBoxIsSet_) set_reference_box();
   for (int m = 0; m < 3; m++) {
     if ((bool) periodicity[m]) {
       if (x[m] < lower_[m] || x[m] > upper_[m]) {
@@ -455,15 +456,15 @@ void LammpsInterface::periodicity_correction(double * x) const
   }
 }
 
-void LammpsInterface::set_reference_box(void) const 
+void LammpsInterface::set_reference_box(void) const
 {
   double * hi = lammps_->domain->boxhi;
   double * lo = lammps_->domain->boxlo;
   double * len = lammps_->domain->prd;
   for (int i = 0; i < 3; i++) {
-    upper_[i] = hi[i]; 
-    lower_[i] = lo[i]; 
-    length_[i] = len[i]; 
+    upper_[i] = hi[i];
+    lower_[i] = lo[i];
+    length_[i] = len[i];
   }
   refBoxIsSet_ = true;
 }
@@ -475,7 +476,7 @@ double LammpsInterface::domain_yprd() const { return lammps_->domain->yprd; }
 
 double LammpsInterface::domain_zprd() const { return lammps_->domain->zprd; }
 
-double LammpsInterface::domain_volume() const 
+double LammpsInterface::domain_volume() const
 {
   return (lammps_->domain->xprd)*
          (lammps_->domain->yprd)*
@@ -492,7 +493,7 @@ int LammpsInterface::domain_triclinic() const { return lammps_->domain->triclini
 
 void LammpsInterface::box_periodicity(int & xperiodic,
                                           int & yperiodic,
-                                          int & zperiodic) const 
+                                          int & zperiodic) const
 {
   xperiodic = lammps_->domain->xperiodic;
   yperiodic = lammps_->domain->yperiodic;
@@ -520,11 +521,11 @@ bool LammpsInterface::region_bounds(const char * regionName,
   xscale = region_xscale(iRegion);
   yscale = region_yscale(iRegion);
   zscale = region_zscale(iRegion);
-  xmin = region_xlo(iRegion); 
+  xmin = region_xlo(iRegion);
   xmax = region_xhi(iRegion);
-  ymin = region_ylo(iRegion); 
+  ymin = region_ylo(iRegion);
   ymax = region_yhi(iRegion);
-  zmin = region_zlo(iRegion); 
+  zmin = region_zlo(iRegion);
   zmax = region_zhi(iRegion);
   if (strcmp(region_style(iRegion),"block")==0) { return true; }
   else                                          { return false; }
@@ -560,10 +561,10 @@ double LammpsInterface::convert_units(double value, UnitsType in, UnitsType out,
       }
       else if (out==ATC) {
         if      (units_style()==REAL) {
-          return value; 
+          return value;
         }
         else if (units_style()==METAL) {
-          return convert_units(value, METAL, out, massExp, lenExp, timeExp)*1.0; 
+          return convert_units(value, METAL, out, massExp, lenExp, timeExp)*1.0;
         }
       }
       else throw ATC_Error("can't convert");
@@ -574,10 +575,10 @@ double LammpsInterface::convert_units(double value, UnitsType in, UnitsType out,
       }
       else if (out==ATC) {
         if      (units_style()==REAL) {
-          return convert_units(value, REAL, out, massExp, lenExp, timeExp)*1.0; 
+          return convert_units(value, REAL, out, massExp, lenExp, timeExp)*1.0;
         }
         else if (units_style()==METAL) {
-          return value; 
+          return value;
         }
       }
       else throw ATC_Error("can't convert");
@@ -598,14 +599,14 @@ double LammpsInterface::ylattice() const { return lammps_->domain->lattice->ylat
 double LammpsInterface::zlattice() const { return lammps_->domain->lattice->zlattice; }
 
 LammpsInterface::LatticeType LammpsInterface::lattice_style() const
-{ 
-  if (lammps_->domain->lattice) 
-    return (LammpsInterface::LatticeType)lammps_->domain->lattice->style; 
+{
+  if (lammps_->domain->lattice)
+    return (LammpsInterface::LatticeType)lammps_->domain->lattice->style;
   else
     throw ATC_Error("Lattice has not been defined");
 }
 
-//* retuns the number of basis vectors 
+//* retuns the number of basis vectors
 int LammpsInterface::n_basis() const
 {
   return lammps_->domain->lattice->nbasis;
@@ -644,7 +645,7 @@ double LammpsInterface::near_neighbor_cutoff(void) const
   double alat = LammpsInterface::max_lattice_constant();
   LatticeType type = lattice_style();
   if (type == LammpsInterface::SC) {
-    cutoff = 0.5*(1.0+sqrt(2.0))*alat; 
+    cutoff = 0.5*(1.0+sqrt(2.0))*alat;
   } else if (type == LammpsInterface::BCC) {
     cutoff = 0.5*(0.5*sqrt(3.0)+1.0)*alat;
   } else if (type == LammpsInterface::FCC) {
@@ -654,16 +655,16 @@ double LammpsInterface::near_neighbor_cutoff(void) const
   } else if (type == LammpsInterface::DIAMOND) {
     cutoff = 0.5*(0.25*sqrt(3.0)+1.0/sqrt(2.0))*alat;
   } else if (type == LammpsInterface::SQ) {
-    cutoff = 0.5*(1.0+sqrt(2.0))*alat; 
+    cutoff = 0.5*(1.0+sqrt(2.0))*alat;
   } else if (type == LammpsInterface::SQ2) {
-    cutoff = 0.5*(1.0/sqrt(2.0)+1.0)*alat; 
+    cutoff = 0.5*(1.0/sqrt(2.0)+1.0)*alat;
   } else if (type == LammpsInterface::HEX) {
-    cutoff = 0.5*(1.0/sqrt(3.0)+1.0)*alat; 
+    cutoff = 0.5*(1.0/sqrt(3.0)+1.0)*alat;
   } else {
     throw ATC_Error("Unknown lattice type");
   }
   return cutoff;
-} 
+}
 
 //* gets the unit cell vectors
 void LammpsInterface::unit_cell(double *a1, double *a2, double *a3) const
@@ -674,7 +675,7 @@ void LammpsInterface::unit_cell(double *a1, double *a2, double *a3) const
   LAMMPS_NS::Lattice *lattice = lammps_->domain->lattice;
   // transform origin
   lattice->lattice2box(origin[0], origin[1], origin[2]);
- 
+
   // copy reference lattice vectors
   memcpy(a[0], lattice->a1, 3*sizeof(double));
   memcpy(a[1], lattice->a2, 3*sizeof(double));
@@ -682,7 +683,7 @@ void LammpsInterface::unit_cell(double *a1, double *a2, double *a3) const
 
   for (i=0; i<3; i++)
   {
-    lattice->lattice2box(a[i][0], a[i][1], a[i][2]);    
+    lattice->lattice2box(a[i][0], a[i][1], a[i][2]);
     for (j=0; j<3; j++)  a[i][j] -= origin[j];
   }
 }
@@ -699,7 +700,7 @@ int LammpsInterface::num_atoms_per_cell(void) const
   else if (comm_rank()==0) {
     //{throw ATC_Error("lattice style not currently supported by ATC");}
     print_msg_once("WARNING:  Cannot get number of atoms per cell from lattice");
-    naCell = 1; 
+    naCell = 1;
   }
   return naCell;
 }
@@ -708,7 +709,7 @@ int LammpsInterface::num_atoms_per_cell(void) const
 double LammpsInterface::volume_per_atom(void) const
 {
   double naCell = num_atoms_per_cell();
-  double volPerAtom =  
+  double volPerAtom =
     xlattice() * ylattice() * zlattice() / naCell;
   return volPerAtom;
 }
@@ -734,24 +735,24 @@ void LammpsInterface::lattice(MATRIX &N, MATRIX &B) const
 
 double LammpsInterface::boltz() const{ return lammps_->force->boltz;      }
 
-double LammpsInterface::mvv2e() const{ return lammps_->force->mvv2e;      }     
+double LammpsInterface::mvv2e() const{ return lammps_->force->mvv2e;      }
 
-double LammpsInterface::ftm2v()const { return lammps_->force->ftm2v;      }     
+double LammpsInterface::ftm2v()const { return lammps_->force->ftm2v;      }
 
-double LammpsInterface::nktv2p()const{ return lammps_->force->nktv2p;     }    
+double LammpsInterface::nktv2p()const{ return lammps_->force->nktv2p;     }
 
-double LammpsInterface::qqr2e() const{ return lammps_->force->qqr2e;      }     
+double LammpsInterface::qqr2e() const{ return lammps_->force->qqr2e;      }
 
-double LammpsInterface::qe2f()  const{ return lammps_->force->qe2f;       }      
+double LammpsInterface::qe2f()  const{ return lammps_->force->qe2f;       }
 double LammpsInterface::dielectric()const{return lammps_->force->dielectric; }
 
 double LammpsInterface::qqrd2e()const{ return lammps_->force->qqrd2e;     }
 
 double LammpsInterface::qv2e()  const{ return qe2f()*ftm2v();             }
 
-double LammpsInterface::pair_force(int i, int j, double rsq, 
-  double & fmag_over_rmag) const     
-{ 
+double LammpsInterface::pair_force(int i, int j, double rsq,
+  double & fmag_over_rmag) const
+{
   int itype = (lammps_->atom->type)[i];
   int jtype = (lammps_->atom->type)[j];
   // return value is the energy
@@ -761,9 +762,9 @@ double LammpsInterface::pair_force(int i, int j, double rsq,
   }
   return 0.0;
 }
-double LammpsInterface::pair_force(int n, double rsq, 
-  double & fmag_over_rmag) const     
-{ 
+double LammpsInterface::pair_force(int n, double rsq,
+  double & fmag_over_rmag) const
+{
   int i = bond_list_i(n);
   int j = bond_list_j(n);
   int type = bond_list_type(n);
@@ -771,9 +772,9 @@ double LammpsInterface::pair_force(int n, double rsq,
   return lammps_->force->bond->single(type,rsq,i,j,fmag_over_rmag);
 }
 double LammpsInterface::pair_force(
-                                   map< std::pair< int,int >,int >::const_iterator itr, double rsq, 
+                                   map< std::pair< int,int >,int >::const_iterator itr, double rsq,
   double & fmag_over_rmag, int nbonds) const
-{ 
+{
   int n = itr->second;
   if (n < nbonds) {
     return pair_force(n, rsq,fmag_over_rmag);
@@ -786,9 +787,9 @@ double LammpsInterface::pair_force(
   }
 }
 double LammpsInterface::pair_force(
-  std::pair< std::pair< int,int >,int > apair, double rsq, 
+  std::pair< std::pair< int,int >,int > apair, double rsq,
   double & fmag_over_rmag, int nbonds) const
-{ 
+{
   int n = apair.second;
   if (n < nbonds) {
     return pair_force(n, rsq,fmag_over_rmag);
@@ -801,7 +802,7 @@ double LammpsInterface::pair_force(
   }
 }
 double LammpsInterface::bond_stiffness(int i, int j, double rsq0) const
-{ 
+{
   const double perturbation = 1.e-8;
   double rsq1 = sqrt(rsq0)+perturbation;
   rsq1 *= rsq1;
@@ -838,7 +839,7 @@ int LammpsInterface::delete_atom(int id) const
 }
 
 //* insert atom
-int LammpsInterface::insert_atom(int atype, int amask, 
+int LammpsInterface::insert_atom(int atype, int amask,
   double *ax, double *av, double aq) const
 {
   LAMMPS_NS::Atom * atom  = lammps_->atom;
@@ -846,8 +847,8 @@ int LammpsInterface::insert_atom(int atype, int amask,
   int m = atom->nlocal - 1;
   atom->mask[m] = amask;
   atom->v[m][0] = av[0];
-  atom->v[m][1] = av[1]; 
-  atom->v[m][2] = av[2]; 
+  atom->v[m][1] = av[1];
+  atom->v[m][2] = av[2];
   if (aq != 0) atom->q[m] = aq;
 
   int nfix = lammps_->modify->nfix;
@@ -875,7 +876,7 @@ int LammpsInterface::reset_ghosts(int deln) const
 }
 
 //* energy for interactions within the shortrange cutoff
-double LammpsInterface::shortrange_energy(double *coord, 
+double LammpsInterface::shortrange_energy(double *coord,
   int itype, int id, double max) const
 {
   LAMMPS_NS::Atom * atom  = lammps_->atom;
@@ -891,7 +892,7 @@ double LammpsInterface::shortrange_energy(double *coord,
 
   double total_energy = 0.0;
   for (int j = 0; j < nall; j++) {
-    if (id == j) continue; 
+    if (id == j) continue;
     // factor_lj = special_lj[sbmask(j)];
     // factor_coul = special_coul[sbmask(j)];
     //j &= NEIGHMASK;
@@ -914,7 +915,7 @@ double LammpsInterface::shortrange_energy(int id, double max) const
   return shortrange_energy(x,type,id,max);
 }
 
-POTENTIAL LammpsInterface::potential() const 
+POTENTIAL LammpsInterface::potential() const
 {
   // find pair style - FRAGILE
   const int nStyles = 4;
@@ -923,7 +924,7 @@ POTENTIAL LammpsInterface::potential() const
                           "lj/cut/coul/cut",
                           "lj/charmm/coul/long"};
   LAMMPS_NS::Pair *pair = NULL;
-  for (int i = 0; i < nStyles; i++){ 
+  for (int i = 0; i < nStyles; i++){
     pair = lammps_->force->pair_match(pairStyles[i].c_str(),1);
     if (pair != NULL) break;
   }
@@ -945,7 +946,7 @@ int LammpsInterface::type_to_groupbit(int itype) const
   return int_allmax(groupbit);
 }
 
-bool LammpsInterface::epsilons(int itype, POTENTIAL pair, double * epsilon0) const 
+bool LammpsInterface::epsilons(int itype, POTENTIAL pair, double * epsilon0) const
 {
   // grab energy parameters
   char * pair_parameter = new char[8];
@@ -974,14 +975,14 @@ bool LammpsInterface::set_epsilons(int itype, POTENTIAL pair, double * epsilon) 
   delete [] pair_parameter;
   if (epsilons == NULL) return false;
   //if (epsilons == NULL) error->all(FLERR,"Fix concentration adapted pair style parameter not supported");
-  // scale interactions 
+  // scale interactions
   int i1,i2;
   for (int i = 1; i < ntypes()+1; i++) {
     if (i < itype) { i1 = i; i2 = itype; }
     else           { i2 = i; i1 = itype; }
     epsilons[i1][i2] = epsilon[i-1];
   }
-  
+
   return true;
 }
 
@@ -1053,12 +1054,12 @@ void LammpsInterface::advance_random_normal (RNG_POINTER p, int n) const {
 }
 
 //* Boltzmann's constant in M,L,T,t units
-double LammpsInterface::kBoltzmann() const  { 
+double LammpsInterface::kBoltzmann() const  {
   return (lammps_->force->boltz)/(lammps_->force->mvv2e);
 }
 
-//* Planck's constant 
-double LammpsInterface::hbar() const  { 
+//* Planck's constant
+double LammpsInterface::hbar() const  {
   const int UNITS_STYLE = (int) units_style();
   double hbar = 1.0; // LJ: Dimensionless
   if      (UNITS_STYLE == 2) hbar = 15.1685792814; // Real: KCal/mol-fs
@@ -1067,15 +1068,15 @@ double LammpsInterface::hbar() const  {
 }
 
 //* Dulong-Petit heat capacity
-double LammpsInterface::heat_capacity() const  { 
+double LammpsInterface::heat_capacity() const  {
   double rhoCp = dimension()*kBoltzmann()/volume_per_atom();
   return rhoCp;
 }
 
 //* reference mass density for a *unit cell*
 // all that is needed is a unit cell: volume, types, mass per type
-double LammpsInterface::mass_density(int* numPerType) const  
-{ 
+double LammpsInterface::mass_density(int* numPerType) const
+{
   const double *mass         = lammps_->atom->mass;
   if (!mass) throw ATC_Error("cannot compute a mass density: no mass");
   const int    ntypes        = lammps_->atom->ntypes;
@@ -1128,7 +1129,7 @@ double * LammpsInterface::special_coul() const
   return lammps_->force->special_coul;
 }
 
-//* flag for newton 
+//* flag for newton
 int LammpsInterface::newton_pair() const
 {
   return lammps_->force->newton_pair;
@@ -1141,25 +1142,25 @@ int LammpsInterface::newton_pair() const
 int LammpsInterface::ngroup() const { return lammps_->group->ngroup; }
 
 int LammpsInterface::group_bit(string name) const
-{ 
+{
   return group_bit(group_index(name));
 }
 
 int LammpsInterface::group_bit(int iGroup) const
-{ 
+{
   int mybit = 0;
   mybit |= lammps_->group->bitmask[iGroup];
   if (mybit < 0 || mybit > MAX_GROUP_BIT) {
     string msg("LammpsInterface::group_bit() lammps group bit "+to_string(mybit)+" is out of range 0:"+to_string(MAX_GROUP_BIT));
     throw ATC_Error(msg);
   }
-  
+
   return mybit;
 }
 
 int LammpsInterface::group_index(string name) const
-{ 
-  int igroup = lammps_->group->find(name.c_str());          
+{
+  int igroup = lammps_->group->find(name.c_str());
   if (igroup == -1) {
     string msg("LammpsInterface::group_index() lammps group "+name+" does not exist");
     throw ATC_Error(msg);
@@ -1169,12 +1170,12 @@ int LammpsInterface::group_index(string name) const
 
 int LammpsInterface::group_inverse_mask(int iGroup) const
 {
-  return lammps_->group->inversemask[iGroup]; 
+  return lammps_->group->inversemask[iGroup];
 }
 
 char * LammpsInterface::group_name(int iGroup) const
-{ 
-  return lammps_->group->names[iGroup]; 
+{
+  return lammps_->group->names[iGroup];
 }
 
 void LammpsInterface::group_bounds(int iGroup, double * b) const
@@ -1192,9 +1193,9 @@ double * LammpsInterface::create_1d_double_array(int length, const char *name) c
   return lammps_->memory->create(myArray, length, name);
 }
 
-double *LammpsInterface::grow_1d_double_array(double *array, 
+double *LammpsInterface::grow_1d_double_array(double *array,
                                               int length,
-                                              const char *name) const 
+                                              const char *name) const
 {
   return lammps_->memory->grow(array, length, name);
 }
@@ -1212,10 +1213,10 @@ void LammpsInterface::destroy_2d_double_array(double **d) const {
   lammps_->memory->destroy(d);
 }
 
-double **LammpsInterface::grow_2d_double_array(double **array, 
-                                               int n1, 
-                                               int n2, 
-                                               const char *name) const 
+double **LammpsInterface::grow_2d_double_array(double **array,
+                                               int n1,
+                                               int n2,
+                                               const char *name) const
 {
   return lammps_->memory->grow(array, n1, n2, name);
 }
@@ -1226,9 +1227,9 @@ int * LammpsInterface::create_1d_int_array(int length, const char *name) const {
   return lammps_->memory->create(myArray, length, name);
 }
 
-int *LammpsInterface::grow_1d_int_array(int *array, 
+int *LammpsInterface::grow_1d_int_array(int *array,
                                         int length,
-                                        const char *name) const 
+                                        const char *name) const
 {
   return lammps_->memory->grow(array, length, name);
 }
@@ -1294,22 +1295,22 @@ int**   LammpsInterface::bond_list() const { return lammps_->neighbor->bondlist;
 
 char * LammpsInterface::region_name(int iRegion)  const
 {
-  return lammps_->domain->regions[iRegion]->id; 
+  return lammps_->domain->regions[iRegion]->id;
 }
 
 char * LammpsInterface::region_style(int iRegion) const
-{ 
-  return lammps_->domain->regions[iRegion]->style; 
+{
+  return lammps_->domain->regions[iRegion]->style;
 }
 
 double LammpsInterface::region_xlo(int iRegion) const
 {
-  return lammps_->domain->regions[iRegion]->extent_xlo; 
+  return lammps_->domain->regions[iRegion]->extent_xlo;
 }
 
 double LammpsInterface::region_xhi(int iRegion) const
 {
-  return lammps_->domain->regions[iRegion]->extent_xhi; 
+  return lammps_->domain->regions[iRegion]->extent_xhi;
 }
 
 double LammpsInterface::region_ylo(int iRegion) const
@@ -1334,7 +1335,7 @@ double LammpsInterface::region_zhi(int iRegion) const
 
 double LammpsInterface::region_xscale(int iRegion) const
 {
-  return lammps_->domain->regions[iRegion]->xscale; 
+  return lammps_->domain->regions[iRegion]->xscale;
 }
 
 double LammpsInterface::region_yscale(int iRegion)  const
@@ -1344,10 +1345,10 @@ double LammpsInterface::region_yscale(int iRegion)  const
 
 double LammpsInterface::region_zscale(int iRegion)  const
 {
-  return lammps_->domain->regions[iRegion]->zscale; 
+  return lammps_->domain->regions[iRegion]->zscale;
 }
 
-int LammpsInterface::region_match(int iRegion, double x, double y, double z) const { 
+int LammpsInterface::region_match(int iRegion, double x, double y, double z) const {
   return lammps_->domain->regions[iRegion]->match(x,y,z);
 }
 
@@ -1401,14 +1402,14 @@ int LammpsInterface::compute_ncols_peratom(COMPUTE_POINTER computePointer) const
 {
   LAMMPS_NS::Compute* cmpt = const_to_active(computePointer);
   int ndof = cmpt->size_peratom_cols;
-  if (ndof == 0 ) ndof = 1; 
+  if (ndof == 0 ) ndof = 1;
   return ndof;
 }
 
 double*  LammpsInterface::compute_vector_peratom(COMPUTE_POINTER computePointer) const
 {
   LAMMPS_NS::Compute* cmpt = const_to_active(computePointer);
-  if (!(cmpt->invoked_flag & INVOKED_PERATOM)) { 
+  if (!(cmpt->invoked_flag & INVOKED_PERATOM)) {
     cmpt->compute_peratom();
     cmpt->invoked_flag |= INVOKED_PERATOM;
   }
@@ -1437,7 +1438,7 @@ LAMMPS_NS::Compute * LammpsInterface::const_to_active(COMPUTE_POINTER computePoi
 }
 
 // -----------------------------------------------------------------
-//  compute pe/atom interface methods 
+//  compute pe/atom interface methods
 //  - the only compute "owned" by ATC
 // -----------------------------------------------------------------
 int  LammpsInterface::create_compute_pe_peratom(void)  const
@@ -1445,7 +1446,7 @@ int  LammpsInterface::create_compute_pe_peratom(void)  const
   char **list = new char*[4];
   string atomPeName = compute_pe_name();
   list[0] = (char *) atomPeName.c_str();
-  list[1] = (char *) "all"; 
+  list[1] = (char *) "all";
   list[2] = (char *) "pe/atom";
   list[3] = (char *) "pair";
 
@@ -1490,7 +1491,7 @@ void LammpsInterface::unwrap_coordinates(int iatom, double* xatom) const
   int xbox,ybox,zbox;
 
   // for triclinic, need to unwrap current atom coord via h matrix
-  
+
   if (lammps_->domain->triclinic == 0) {
     xbox = (image[iatom] & 1023) - 512;
     ybox = (image[iatom] >> 10 & 1023) - 512;
