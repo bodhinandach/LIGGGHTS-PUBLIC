@@ -40,7 +40,7 @@
     Copyright 2016-     DCS Computing GmbH, Linz
 ------------------------------------------------------------------------- */
 
-#if defined(LAMMPS_VTK) 
+#if defined(LAMMPS_VTK)
 
 #ifndef LMP_DUMP_LOCAL_GRAN_H
 #define LMP_DUMP_LOCAL_GRAN_H
@@ -120,7 +120,7 @@ class DumpLocalGran : public Pointers {
 
     void define_properties();
     typedef void (DumpLocalGran::*FnPtrPack)(int);
-    
+
     std::map<int, FnPtrPack> pack_choice;   // ptrs to pack functions
     std::map<int, int> vtype;               // data type for each attribute
     std::map<int, std::string> name;        // label for each attribute
@@ -155,6 +155,7 @@ class DumpLocalGran : public Pointers {
     void pack_contact_point(int);
     void pack_ms_id1(int);
     void pack_ms_id2(int);
+    void pack_normal(int);
 };
 
 }
