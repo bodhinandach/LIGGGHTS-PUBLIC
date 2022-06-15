@@ -77,6 +77,7 @@ class ComputeStressAtom : public Compute {
 
  private:
   int keflag,pairflag,bondflag,angleflag,dihedralflag,improperflag;
+  int cylflag;
   int kspaceflag,fixflag;
   int nmax;
   double **stress;

@@ -51,6 +51,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <cmath>        // std::atan2
 #include "compute_stress_atom.h"
 #include "atom.h"
 #include "update.h"
@@ -89,15 +90,18 @@ ComputeStressAtom::ComputeStressAtom(LAMMPS *lmp, int &iarg, int narg, char **ar
     bondflag = angleflag = dihedralflag = improperflag = 1;
     kspaceflag = 1;
     fixflag = 1;
+    cylflag = 0;
   } else {
     keflag = 0;
     pairflag = 0;
     bondflag = angleflag = dihedralflag = improperflag = 0;
     kspaceflag = 0;
     fixflag = 0;
+    cylflag = 0;
     while (iarg < narg) {
       if (strcmp(arg[iarg],"ke") == 0) keflag = 1;
       else if (strcmp(arg[iarg],"pair") == 0) pairflag = 1;
+      else if (strcmp(arg[iarg],"cyl") == 0) cylflag = 1; // FIXME: Only work for x axis rotation
       else if (strcmp(arg[iarg],"bond") == 0) bondflag = 1;
       else if (strcmp(arg[iarg],"angle") == 0) angleflag = 1;
       else if (strcmp(arg[iarg],"dihedral") == 0) dihedralflag = 1;
@@ -308,6 +312,82 @@ void ComputeStressAtom::compute_peratom()
           stress[i][8] += onemass*v[i][2]*v[i][1];
         }
     }
+  }
+
+  // Convert to cylindrical coordinates
+  if (cylflag){
+      double **x = atom->x;
+      for (i = 0; i < nlocal; i++){
+          double theta = std::atan2(x[i][2], x[i][1]);
+          double rotation[3][3];
+          rotation[0][0] = 1.0;
+          rotation[0][1] = 0.0;
+          rotation[0][2] = 0.0;
+
+          rotation[1][0] = 0.0;
+          rotation[1][1] = std::cos(theta);
+          rotation[1][2] = -std::sin(theta);
+
+          rotation[2][0] = 0.0;
+          rotation[2][1] = std::sin(theta);
+          rotation[2][2] = std::cos(theta);
+
+          double stress_mat[3][3];
+          stress_mat[0][0] = stress[i][0];
+          stress_mat[0][1] = stress[i][3];
+          stress_mat[0][2] = stress[i][4];
+
+          stress_mat[1][0] = stress[i][6];
+          stress_mat[1][1] = stress[i][1];
+          stress_mat[1][2] = stress[i][5];
+
+          stress_mat[2][0] = stress[i][7];
+          stress_mat[2][1] = stress[i][8];
+          stress_mat[2][2] = stress[i][2];
+
+          // Initializing temporary mult to 0.
+          double mult[3][3];
+          for(unsigned p = 0; p < 3; ++p)
+              for(unsigned q = 0; q < 3; ++q)
+              {
+                  mult[p][q]=0.0;
+              }
+
+          // mult = stress * rot
+          for(unsigned p = 0; p < 3; ++p)
+              for(unsigned q = 0; q < 3; ++q)
+                  for(unsigned o = 0; o < 3; ++o)
+                  {
+                      mult[p][q] += stress_mat[p][o] * rotation[o][q];
+                  }
+
+          // Initializing new stress matrix to 0.
+          double new_stress[3][3];
+          for(unsigned p = 0; p < 3; ++p)
+              for(unsigned q = 0; q < 3; ++q)
+              {
+                  new_stress[p][q]=0.0;
+              }
+
+          // new_stress = rot.transpose() * mult
+          for(unsigned p = 0; p < 3; ++p)
+              for(unsigned q = 0; q < 3; ++q)
+                  for(unsigned o = 0; o < 3; ++o)
+                  {
+                      new_stress[p][q] += rotation[o][p] * mult[o][q];
+                  }
+
+          // Cylindrical stress
+          stress[i][0] = new_stress[0][0];
+          stress[i][1] = new_stress[1][1];
+          stress[i][2] = new_stress[2][2];
+          stress[i][3] = new_stress[0][1];
+          stress[i][4] = new_stress[0][2];
+          stress[i][5] = new_stress[1][2];
+          stress[i][6] = new_stress[1][0];
+          stress[i][7] = new_stress[2][0];
+          stress[i][8] = new_stress[2][1];
+      }
   }
 
   // convert to stress*volume units = -pressure*volume
