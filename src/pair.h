@@ -66,6 +66,9 @@ class Pair : protected Pointers {
   double virial[6];              // accumulated virial
   double *eatom,**vatom;         // accumulated per-atom energy/virial
 
+  double **fabricatom;           // accumulated fabric
+  int *ncontact;                 // total number of atom contact
+
   double cutforce;               // max cutoff for all atom pairs
   double **cutsq;                // cutoff sq for each atom pair
   int **setflag;                 // 0/1 = whether each i,j has been set
@@ -97,7 +100,7 @@ class Pair : protected Pointers {
 
   int evflag;                    // energy,virial settings
   int eflag_either,eflag_global,eflag_atom;
-  int vflag_either,vflag_global,vflag_atom;
+  int vflag_either,vflag_global,vflag_atom,fabricflag_atom;
 
   int ncoultablebits;            // size of Coulomb table, accessed by KSpace
   int ndisptablebits;            // size of dispersion table
@@ -225,7 +228,7 @@ class Pair : protected Pointers {
   double THIRD;
 
   int vflag_fdotr;
-  int maxeatom,maxvatom;
+  int maxeatom,maxvatom,maxfabricatom;
 
   virtual void ev_setup(int, int);
   void ev_unset();
