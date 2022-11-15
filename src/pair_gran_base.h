@@ -333,7 +333,7 @@ public:
 
         // rsq < radsum * radsum is broad phase check with bounding spheres
         // cmodel.checkSurfaceIntersect() is narrow phase check
-        
+
         #ifdef SUPERQUADRIC_ACTIVE_FLAG
         if (rmass) {
           sidata.mi = rmass[i];
@@ -394,7 +394,7 @@ public:
           sidata.meff = meff;
           sidata.mi = mi;
           sidata.mj = mj;
-          
+
           if(atom->sphere_flag) {
               sidata.en[0]   = enx_sphere;
               sidata.en[1]   = eny_sphere;
@@ -447,7 +447,7 @@ public:
             pg->cpl_add_pair(sidata, i_forces);
 
           if (pg->evflag)
-            pg->ev_tally_xyz(i, j, nlocal, newton_pair, 0.0, 0.0,i_forces.delta_F[0],i_forces.delta_F[1],i_forces.delta_F[2],sidata.delta[0],sidata.delta[1],sidata.delta[2]);
+            pg->ev_tally_xyz(i, j, nlocal, newton_pair, 0.0, 0.0,i_forces.delta_F[0],i_forces.delta_F[1],i_forces.delta_F[2],sidata.delta[0],sidata.delta[1],sidata.delta[2], sidata.kn, sidata.kt);
 
           if (store_contact_forces && 0 == update->ntimestep % pg->storeContactForcesEvery())
           {
