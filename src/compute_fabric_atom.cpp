@@ -153,8 +153,9 @@ void ComputeFabricAtom::compute_peratom()
     double **fabricatom = force->pair->fabricatom;
     int *ncontact = force->pair->ncontact;
     for (i = 0; i < npair; i++)
-      for (j = 0; j < 9; j++)
-        fabric[i][j] += fabricatom[i][j]/ncontact[i];
+      if (ncontact[i] > 0)
+        for (j = 0; j < 9; j++)
+          fabric[i][j] += fabricatom[i][j]/ncontact[i];
   }
 
   // communicate ghost virials between neighbor procs
