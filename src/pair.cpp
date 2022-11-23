@@ -1044,7 +1044,10 @@ void Pair::ev_tally_xyz(int i, int j, int nlocal, int newton_pair,
     ftangent[1] = fy - fn * normal[1];
     ftangent[2] = fz - fn * normal[2];
     ft = vectorMag3D(ftangent);
-    strain_energy = (alpha)/(alpha+1.0)*fn*fn/kn + 0.5*ft*ft/kt;
+
+    double normal_energy = (kn > std::numeric_limits<double>::epsilon()) ? (alpha)/(alpha+1.0)*fn*fn/kn : 0.0;
+    double tangential_energy = (kt > std::numeric_limits<double>::epsilon()) ? 0.5*ft*ft/kt : 0.0;
+    strain_energy = normal_energy + tangential_energy;
 
     if (vflag_global) {
       if (newton_pair) {
