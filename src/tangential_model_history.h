@@ -120,14 +120,14 @@ namespace ContactModels
         registry.connect("coeffFrict", coeffFrict,"tangential_model history");
         if ((elasticpotflag_ || dissipatedflag_) && cmb->is_wall())
         {
-            
+
             error->warning(FLERR, "Disabling energy computation in tangential component for wall due to unresolved issues");
             elasticpotflag_ = false;
             dissipatedflag_ = false;
         }
     }
 
-    inline void surfacesIntersect(const SurfacesIntersectData & sidata, ForceData & i_forces, ForceData & j_forces)
+    inline void surfacesIntersect(SurfacesIntersectData & sidata, ForceData & i_forces, ForceData & j_forces)
     {
         // normal forces = Hookian contact + normal velocity damping
         const double enx = sidata.en[0];
@@ -160,6 +160,7 @@ namespace ContactModels
 
         const double shrmag = sqrt(shear[0]*shear[0] + shear[1]*shear[1] + shear[2]*shear[2]);
         const double kt = sidata.kt;
+        sidata.deltat = shrmag;
         const double xmu = coeffFrict[sidata.itype][sidata.jtype];
 
         // tangential forces = shear + tangential velocity damping
@@ -178,10 +179,10 @@ namespace ContactModels
         if (Ft_shear > Ft_friction) {
           if (shrmag != 0.0) {
             const double ratio = Ft_friction / Ft_shear;
-            
+
             if(heating)
             {
-              const double P_diss_local = (Ft_shear - Ft_friction)*(Ft_shear + Ft_friction) / (update->dt*kt); 
+              const double P_diss_local = (Ft_shear - Ft_friction)*(Ft_shear + Ft_friction) / (update->dt*kt);
               sidata.P_diss += P_diss_local;
               if(heating_track && sidata.is_wall)
                   cmb->tally_pw(P_diss_local, sidata.i, sidata.jtype, 2);
@@ -191,7 +192,7 @@ namespace ContactModels
             Ft1 *= ratio;
             Ft2 *= ratio;
             Ft3 *= ratio;
-            
+
             if (update_history)
             {
                 shear[0] = -Ft1/kt;
@@ -199,7 +200,7 @@ namespace ContactModels
                 shear[2] = -Ft3/kt;
                 if (elasticpotflag_ || dissipatedflag_)
                 {
-                    
+
                     const double weight = 1.0 - vectorMag3D(shear_old)/shrmag;
                     Ft_ela1 = Ft1 * weight;
                     Ft_ela2 = Ft2 * weight;
@@ -217,7 +218,7 @@ namespace ContactModels
           Ft3 -= (gammat*sidata.vtr3);
           if(heating)
           {
-              const double P_diss_local = gammat*(sidata.vtr1*sidata.vtr1+sidata.vtr2*sidata.vtr2+sidata.vtr3*sidata.vtr3); 
+              const double P_diss_local = gammat*(sidata.vtr1*sidata.vtr1+sidata.vtr2*sidata.vtr2+sidata.vtr3*sidata.vtr3);
               sidata.P_diss += P_diss_local;
               if(heating_track && sidata.is_wall)
                   cmb->tally_pw(P_diss_local, sidata.i, sidata.jtype, 1);
@@ -278,7 +279,7 @@ namespace ContactModels
                     double delta[3];
                     sidata.fix_mesh->triMesh()->get_global_vel(delta);
                     vectorScalarMult3D(delta, update->dt);
-                    
+
                     elastic_pot[10] -= (delta[0]*Ft_ela1 +
                                         delta[1]*Ft_ela2 +
                                         delta[2]*Ft_ela3)*0.5;

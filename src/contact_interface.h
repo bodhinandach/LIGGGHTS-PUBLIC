@@ -64,7 +64,7 @@ struct SurfacesCloseData {
   double radj;
   double radsum;
   double rsq;
-  double delta[3];  
+  double delta[3];
 
   double area_ratio;
 
@@ -133,9 +133,9 @@ struct SurfacesCloseData {
 
 struct SurfacesIntersectData : SurfacesCloseData {
 
-  double r;         
-  double rinv;      
-  double en[3];     
+  double r;
+  double rinv;
+  double en[3];
 
   double kt;
   double kn;
@@ -147,21 +147,22 @@ struct SurfacesIntersectData : SurfacesCloseData {
 
   double vn;
   double deltan;
-  double cri;   
-  double crj;   
-  double wr1;   
+  double deltat;
+  double cri;
+  double crj;
+  double wr1;
   double wr2;
   double wr3;
 
-  double vtr1;  
+  double vtr1;
   double vtr2;
   double vtr3;
 
-  double mi;    
+  double mi;
   double mj;
-  double meff;  
+  double meff;
 
-  mutable double P_diss; 
+  mutable double P_diss;
 
   SurfacesIntersectData() : Fn(0.0), Ft(0.0) {}
 };

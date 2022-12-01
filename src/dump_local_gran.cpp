@@ -85,7 +85,7 @@
 using namespace LAMMPS_NS;
 
 enum{INT,DOUBLE,STRING}; // same as in DumpCFG
-enum{X1,X2,CP,V1,V2,ID1,ID2,F,FN,FT,TORQUE,TORQUEN,TORQUET,AREA,DELTA,HEAT,MSID1,MSID2}; // dumps positions, force, normal and tangential forces, torque, normal and tangential torque
+enum{X1,X2,CP,V1,V2,ID1,ID2,F,FN,FT,TORQUE,TORQUEN,TORQUET,AREA,DELTA,HEAT,MSID1,MSID2,NORMAL}; // dumps positions, force, normal and tangential forces, torque, normal and tangential torque
 
 /* ---------------------------------------------------------------------- */
 
@@ -197,7 +197,7 @@ void DumpLocalGran::init_style()
 
 int DumpLocalGran::count()
 {
-    
+
     n_calls_ = 0;
 
     //TODO generalize
@@ -214,7 +214,7 @@ int DumpLocalGran::count()
 
 void DumpLocalGran::prepare_mbSet(vtkSmartPointer<vtkMultiBlockDataSet> mbSet, bool use_poly_data)
 {
-    
+
     // nme = # of dump lines this proc contributes to dump
 
     int nme = count();
@@ -240,7 +240,7 @@ void DumpLocalGran::prepare_mbSet(vtkSmartPointer<vtkMultiBlockDataSet> mbSet, b
         maxbuf = nmax;
         memory->destroy(buf);
         memory->create(buf,maxbuf*size_one,"dump:buf");
-        
+
     }
 
     // ensure ids buffer is sized for sorting
@@ -311,7 +311,7 @@ void DumpLocalGran::pack(int *ids)
 
 void DumpLocalGran::buf2arrays(int n, double *mybuf)
 {
-    
+
     const bool have_cp = cpgl_->offset_contact_point() >= 0;
 
     for (int idata=0; idata < n; ++idata) {
@@ -593,7 +593,7 @@ void DumpLocalGran::define_properties()
 
     if(cpgl_->offset_area() >= 0)
     {
-            
+
             pack_choice[AREA] = &DumpLocalGran::pack_area;
             vtype[AREA] = DOUBLE;
             name[AREA] = "contact_area";
@@ -630,6 +630,14 @@ void DumpLocalGran::define_properties()
             vtype[MSID2] = DOUBLE;
             name[MSID2] = "ms_id2";
             //scalar
+    }
+
+    if(cpgl_->offset_normal() >= 0)
+    {
+            pack_choice[NORMAL] = &DumpLocalGran::pack_normal;
+            vtype[NORMAL] = DOUBLE;
+            name[NORMAL] = "normal";
+            vector_set.insert(NORMAL);
     }
 }
 
@@ -861,6 +869,16 @@ void DumpLocalGran::pack_ms_id2(int n)
 
     for (int i = 0; i < nchoose; i++) {
         buf[n] = cpgl_->get_data()[i][offset];
+        n += size_one;
+    }
+}
+
+void DumpLocalGran::pack_normal(int n)
+{
+    int offset = cpgl_->offset_normal();
+
+    for (int i = 0; i < nchoose; i++) {
+        vectorCopy3D(&cpgl_->get_data()[i][offset],&buf[n]);
         n += size_one;
     }
 }

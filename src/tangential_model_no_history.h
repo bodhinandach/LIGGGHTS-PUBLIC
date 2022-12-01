@@ -71,7 +71,7 @@ namespace ContactModels
       dissipatedflag_(false),
       fix_dissipated_(NULL)
     {
-      
+
     }
 
     inline void registerSettings(Settings &settings)
@@ -109,13 +109,16 @@ namespace ContactModels
       registry.connect("coeffFrict", coeffFrict,"tangential_model history");
     }
 
-    inline void surfacesIntersect(const SurfacesIntersectData & sidata, ForceData & i_forces, ForceData & j_forces) {
+    inline void surfacesIntersect(SurfacesIntersectData & sidata, ForceData & i_forces, ForceData & j_forces) {
       if(sidata.contact_flags) *sidata.contact_flags |= CONTACT_TANGENTIAL_MODEL;
       const double xmu = coeffFrict[sidata.itype][sidata.jtype];
       const double enx = sidata.en[0];
       const double eny = sidata.en[1];
       const double enz = sidata.en[2];
       const double vrel = sqrt(sidata.vtr1*sidata.vtr1 + sidata.vtr2*sidata.vtr2 + sidata.vtr3*sidata.vtr3);
+      const double dt = update->dt;
+      const double deltat = vrel * dt;
+      sidata.deltat = deltat;
 
       // force normalization
       const double Ft_friction = xmu * fabs(sidata.Fn);

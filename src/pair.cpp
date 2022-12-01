@@ -117,12 +117,15 @@ Pair::Pair(LAMMPS *lmp) : Pointers(lmp)
   allocated = 0;
   suffix_flag = Suffix::NONE;
 
-  maxeatom = maxvatom = 0;
+  maxeatom = maxvatom = maxfabricatom = maxseatom = 0;
   eatom = NULL;
   vatom = NULL;
+  fabricatom = NULL;
+  ncontact = NULL;
+  seatom = NULL;
 
   listgranhistory = NULL;
-  list = listhalf = listfull = listgranhistory = listinner = listmiddle = listouter = NULL; 
+  list = listhalf = listfull = listgranhistory = listinner = listmiddle = listouter = NULL;
 
   datamask = ALL_MASK;
   datamask_ext = ALL_MASK;
@@ -134,6 +137,9 @@ Pair::~Pair()
 {
   memory->destroy(eatom);
   memory->destroy(vatom);
+  memory->destroy(fabricatom);
+  memory->destroy(ncontact);
+  memory->destroy(seatom);
 }
 
 /* ----------------------------------------------------------------------
@@ -268,11 +274,11 @@ void Pair::init()
 
 void Pair::reinit()
 {
-  
+
   etail = ptail = 0.0;
 
-  for (int i = 1; i <= atom->ntypes; i++) 
-    for (int j = i; j <= atom->ntypes; j++) { 
+  for (int i = 1; i <= atom->ntypes; i++)
+    for (int j = i; j <= atom->ntypes; j++) {
       init_one(i,j);
       if (tail_flag) {
         etail += etail_ij;
@@ -527,7 +533,7 @@ void Pair::init_tables(double cut_coul, double *cut_respa)
 void Pair::init_tables_disp(double cut_lj_global)
 {
   int masklo,maskhi;
-  double rsq; 
+  double rsq;
   double g_ewald_6 = force->kspace->g_ewald_6;
   double g2 = g_ewald_6*g_ewald_6, g6 = g2*g2*g2, g8 = g6*g2;
 
@@ -564,7 +570,7 @@ void Pair::init_tables_disp(double cut_lj_global)
       rsq_lookup.i = i << ndispshiftbits;
       rsq_lookup.i |= maskhi;
     }
-    
+
     rsq = rsq_lookup.f;
     double x2 = g2*rsq, a2 = 1.0/x2;
     x2 = a2*exp(-x2);
@@ -600,7 +606,7 @@ void Pair::init_tables_disp(double cut_lj_global)
   // deltas at itablemax only needed if corresponding rsq < cut*cut
   // if so, compute deltas between rsq and cut*cut
 
-  double f_tmp,e_tmp; 
+  double f_tmp,e_tmp;
   double cut_lj_globalsq;
   itablemin = minrsq_lookup.i & ndispmask;
   itablemin >>= ndispshiftbits;
@@ -611,7 +617,7 @@ void Pair::init_tables_disp(double cut_lj_global)
 
   if (rsq_lookup.f < (cut_lj_globalsq = cut_lj_global * cut_lj_global)) {
     rsq_lookup.f = cut_lj_globalsq;
-    
+
     double x2 = g2*rsq, a2 = 1.0/x2;
     x2 = a2*exp(-x2);
     f_tmp = g8*(((6.0*a2+6.0)*a2+3.0)*a2+1.0)*x2*rsq;
@@ -713,6 +719,8 @@ void Pair::ev_setup(int eflag, int vflag)
   vflag_either = vflag;
   vflag_global = vflag % 4;
   vflag_atom = vflag / 4;
+  fabricflag_atom = 1;
+  seflag_atom = 1;
 
   // reallocate per-atom arrays if necessary
 
@@ -725,6 +733,18 @@ void Pair::ev_setup(int eflag, int vflag)
     maxvatom = atom->nmax;
     memory->destroy(vatom);
     memory->create(vatom,comm->nthreads*maxvatom,6,"pair:vatom");
+  }
+  if (fabricflag_atom && atom->nmax > maxfabricatom) {
+    maxfabricatom = atom->nmax;
+    memory->destroy(fabricatom);
+    memory->create(fabricatom,comm->nthreads*maxfabricatom,9,"pair:fabricatom");
+    memory->destroy(ncontact);
+    memory->create(ncontact,comm->nthreads*maxfabricatom,"pair:ncontact");
+  }
+  if (seflag_atom && atom->nmax > maxseatom) {
+    maxseatom = atom->nmax;
+    memory->destroy(seatom);
+    memory->create(seatom,comm->nthreads*maxseatom,"pair:seatom");
   }
 
   // zero accumulators
@@ -750,6 +770,29 @@ void Pair::ev_setup(int eflag, int vflag)
       vatom[i][5] = 0.0;
     }
   }
+  if (fabricflag_atom) {
+    n = atom->nlocal;
+    if (force->newton) n += atom->nghost;
+    for (i = 0; i < n; i++) {
+      fabricatom[i][0] = 0.0;
+      fabricatom[i][1] = 0.0;
+      fabricatom[i][2] = 0.0;
+      fabricatom[i][3] = 0.0;
+      fabricatom[i][4] = 0.0;
+      fabricatom[i][5] = 0.0;
+      fabricatom[i][6] = 0.0;
+      fabricatom[i][7] = 0.0;
+      fabricatom[i][8] = 0.0;
+      ncontact[i] = 0;
+    }
+  }
+  if (seflag_atom) {
+    n = atom->nlocal;
+    if (force->newton) n += atom->nghost;
+    for (i = 0; i < n; i++) {
+      seatom[i] = 0.0;
+    }
+  }
 
   // if vflag_global = 2 and pair::compute() calls virial_fdotr_compute()
   // compute global virial via (F dot r) instead of via pairwise summation
@@ -758,7 +801,7 @@ void Pair::ev_setup(int eflag, int vflag)
   if (vflag_global == 2 && no_virial_fdotr_compute == 0) {
     vflag_fdotr = 1;
     vflag_global = 0;
-    if (vflag_atom == 0) vflag_either = 0;
+    if (vflag_atom == 0 && fabricflag_atom == 0 && seflag_atom == 0) vflag_either = 0;
     if (vflag_either == 0 && eflag_either == 0) evflag = 0;
   } else vflag_fdotr = 0;
 
@@ -782,6 +825,8 @@ void Pair::ev_unset()
   vflag_either = 0;
   vflag_global = 0;
   vflag_atom = 0;
+  fabricflag_atom = 0;
+  seflag_atom = 0;
   vflag_fdotr = 0;
 }
 
@@ -932,9 +977,14 @@ void Pair::ev_tally_full(int i, double evdwl, double ecoul, double fpair,
 void Pair::ev_tally_xyz(int i, int j, int nlocal, int newton_pair,
                         double evdwl, double ecoul,
                         double fx, double fy, double fz,
-                        double delx, double dely, double delz)
+                        double delx, double dely, double delz, double kn, double kt)
 {
   double evdwlhalf,ecoulhalf,epairhalf,v[6];
+  double normal[3],fab[3][3];
+  double strain_energy;
+  double f[3],ftangent[3];
+  double fn, ft;
+  double alpha = 1.5;
 
   if (eflag_either) {
     if (eflag_global) {
@@ -968,6 +1018,36 @@ void Pair::ev_tally_xyz(int i, int j, int nlocal, int newton_pair,
     v[3] = delx*fy;
     v[4] = delx*fz;
     v[5] = dely*fz;
+
+    normal[0] = delx;
+    normal[1] = dely;
+    normal[2] = delz;
+    vectorNormalize3D(normal);
+
+    // Compute fabric tensor
+    fab[0][0] = normal[0]*normal[0];
+    fab[0][1] = normal[0]*normal[1];
+    fab[0][2] = normal[0]*normal[2];
+    fab[1][0] = normal[1]*normal[0];
+    fab[1][1] = normal[1]*normal[1];
+    fab[1][2] = normal[1]*normal[2];
+    fab[2][0] = normal[2]*normal[0];
+    fab[2][1] = normal[2]*normal[1];
+    fab[2][2] = normal[2]*normal[2];
+
+    // Compute strain energy
+    f[0] = fx;
+    f[1] = fy;
+    f[2] = fz;
+    fn = vectorDot3D(f,normal);
+    ftangent[0] = fx - fn * normal[0];
+    ftangent[1] = fy - fn * normal[1];
+    ftangent[2] = fz - fn * normal[2];
+    ft = vectorMag3D(ftangent);
+
+    double normal_energy = (std::abs(kn) > std::numeric_limits<double>::epsilon()) ? (alpha)/(alpha+1.0)*fn*fn/std::abs(kn) : 0.0;
+    double tangential_energy = (std::abs(kt) > std::numeric_limits<double>::epsilon()) ? 0.5*ft*ft/std::abs(kt) : 0.0;
+    strain_energy = normal_energy + tangential_energy;
 
     if (vflag_global) {
       if (newton_pair) {
@@ -1013,6 +1093,42 @@ void Pair::ev_tally_xyz(int i, int j, int nlocal, int newton_pair,
         vatom[j][3] += 0.5*v[3];
         vatom[j][4] += 0.5*v[4];
         vatom[j][5] += 0.5*v[5];
+      }
+    }
+
+    if (fabricflag_atom) {
+      if (newton_pair || i < nlocal) {
+        fabricatom[i][0] += fab[0][0];
+        fabricatom[i][1] += fab[1][1];
+        fabricatom[i][2] += fab[2][2];
+        fabricatom[i][3] += fab[0][1];
+        fabricatom[i][4] += fab[0][2];
+        fabricatom[i][5] += fab[1][2];
+        fabricatom[i][6] += fab[1][0];
+        fabricatom[i][7] += fab[2][0];
+        fabricatom[i][8] += fab[2][1];
+        ncontact[i]++;
+      }
+      if (newton_pair || j < nlocal) {
+        fabricatom[j][0] += fab[0][0];
+        fabricatom[j][1] += fab[1][1];
+        fabricatom[j][2] += fab[2][2];
+        fabricatom[j][3] += fab[0][1];
+        fabricatom[j][4] += fab[0][2];
+        fabricatom[j][5] += fab[1][2];
+        fabricatom[j][6] += fab[1][0];
+        fabricatom[j][7] += fab[2][0];
+        fabricatom[j][8] += fab[2][1];
+        ncontact[j]++;
+      }
+    }
+
+    if (seflag_atom) {
+      if (newton_pair || i < nlocal) {
+        seatom[i] += 0.5*strain_energy;
+      }
+      if (newton_pair || j < nlocal) {
+        seatom[j] += 0.5*strain_energy;
       }
     }
   }
@@ -1182,7 +1298,7 @@ void Pair::ev_tally4(int i, int j, int k, int m, double evdwl,
 void Pair::ev_tally_tip4p(int key, int *list, double *v,
                           double ecoul, double alpha)
 {
-  int i; 
+  int i;
 
   if (eflag_either) {
     if (eflag_global) eng_coul += ecoul;
@@ -1730,6 +1846,9 @@ double Pair::memory_usage()
 {
   double bytes = comm->nthreads*maxeatom * sizeof(double);
   bytes += comm->nthreads*maxvatom*6 * sizeof(double);
+  bytes += comm->nthreads*maxfabricatom*9 * sizeof(double);
+  bytes += comm->nthreads*maxfabricatom*1 * sizeof(int);
+  bytes += comm->nthreads*maxseatom*1 * sizeof(double);
   return bytes;
 }
 
